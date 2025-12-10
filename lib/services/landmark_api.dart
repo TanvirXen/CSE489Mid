@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../models/landmark.dart';
 
@@ -46,14 +48,9 @@ class LandmarkApi {
   Future<int> createLandmark(LandmarkDraft draft) async {
     final request = http.MultipartRequest('POST', _baseUri);
     _assignCommonFields(request, draft);
-    final image = draft.imageBytes;
-    if (image != null && image.isNotEmpty) {
+    if (draft.hasImage) {
       request.files.add(
-        http.MultipartFile.fromBytes(
-          'image',
-          image,
-          filename: draft.imageName ?? 'upload.jpg',
-        ),
+        _buildMultipartImage(draft.imageBytes!, fileName: draft.imageName),
       );
     }
     final response =
@@ -71,14 +68,9 @@ class LandmarkApi {
     final request = http.MultipartRequest('PUT', _baseUri)
       ..fields['id'] = '${draft.id}';
     _assignCommonFields(request, draft);
-    final image = draft.imageBytes;
-    if (image != null && image.isNotEmpty) {
+    if (draft.hasImage) {
       request.files.add(
-        http.MultipartFile.fromBytes(
-          'image',
-          image,
-          filename: draft.imageName ?? 'upload.jpg',
-        ),
+        _buildMultipartImage(draft.imageBytes!, fileName: draft.imageName),
       );
     }
     final response =
@@ -111,6 +103,62 @@ class LandmarkApi {
     final merged = Map<String, String>.from(_baseUri.queryParameters);
     merged.addAll(queryParameters);
     return _baseUri.replace(queryParameters: merged);
+  }
+
+  http.MultipartFile _buildMultipartImage(Uint8List bytes, {String? fileName}) {
+    final mediaType = _detectMediaType(bytes, fileName: fileName);
+    if (mediaType == null) {
+      throw Exception('Unsupported image format');
+    }
+    return http.MultipartFile.fromBytes(
+      'image',
+      bytes,
+      filename: fileName ?? 'image',
+      contentType: mediaType,
+    );
+  }
+
+  MediaType? _detectMediaType(Uint8List bytes, {String? fileName}) {
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return MediaType('image', 'jpeg');
+    }
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return MediaType('image', 'png');
+    }
+    if (bytes.length >= 6) {
+      final signature = String.fromCharCodes(bytes.sublist(0, 6));
+      if (signature.startsWith('GIF8')) {
+        return MediaType('image', 'gif');
+      }
+    }
+    if (bytes.length >= 12) {
+      final riff = String.fromCharCodes(bytes.sublist(0, 4));
+      final webp = String.fromCharCodes(bytes.sublist(8, 12));
+      if (riff == 'RIFF' && webp == 'WEBP') {
+        return MediaType('image', 'webp');
+      }
+    }
+    final name = fileName?.toLowerCase() ?? '';
+    if (name.endsWith('.jpg') || name.endsWith('.jpeg')) {
+      return MediaType('image', 'jpeg');
+    }
+    if (name.endsWith('.png')) {
+      return MediaType('image', 'png');
+    }
+    if (name.endsWith('.gif')) {
+      return MediaType('image', 'gif');
+    }
+    if (name.endsWith('.webp')) {
+      return MediaType('image', 'webp');
+    }
+    return null;
   }
 
   void _ensureSuccess(
