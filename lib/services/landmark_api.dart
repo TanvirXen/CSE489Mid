@@ -29,10 +29,8 @@ class LandmarkApi {
   }
 
   Future<int> createLandmark(LandmarkDraft draft) async {
-    final request = http.MultipartRequest('POST', _baseUri)
-      ..fields['title'] = draft.title
-      ..fields['lat'] = draft.lat?.toString() ?? ''
-      ..fields['lon'] = draft.lon?.toString() ?? '';
+    final request = http.MultipartRequest('POST', _baseUri);
+    _assignCommonFields(request, draft);
     final image = draft.imageBytes;
     if (image != null && image.isNotEmpty) {
       request.files.add(
@@ -58,10 +56,8 @@ class LandmarkApi {
       throw ArgumentError('Cannot update without an id');
     }
     final request = http.MultipartRequest('PUT', _baseUri)
-      ..fields['id'] = '${draft.id}'
-      ..fields['title'] = draft.title
-      ..fields['lat'] = draft.lat?.toString() ?? ''
-      ..fields['lon'] = draft.lon?.toString() ?? '';
+      ..fields['id'] = '${draft.id}';
+    _assignCommonFields(request, draft);
     final image = draft.imageBytes;
     if (image != null && image.isNotEmpty) {
       request.files.add(
@@ -85,5 +81,13 @@ class LandmarkApi {
     if (response.statusCode != 200) {
       throw Exception('Failed to delete landmark');
     }
+  }
+
+  void _assignCommonFields(http.MultipartRequest request, LandmarkDraft draft) {
+    request.fields.addAll({
+      'title': draft.title,
+      'lat': draft.lat?.toString() ?? '',
+      'lon': draft.lon?.toString() ?? '',
+    });
   }
 }
