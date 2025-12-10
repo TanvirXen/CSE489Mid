@@ -52,4 +52,38 @@ class LandmarkApi {
     final rawId = decoded is Map ? decoded['id'] : null;
     return int.tryParse(rawId?.toString() ?? '') ?? 0;
   }
+
+  Future<void> updateLandmark(LandmarkDraft draft) async {
+    if (draft.id == null) {
+      throw ArgumentError('Cannot update without an id');
+    }
+    final request = http.MultipartRequest('PUT', _baseUri)
+      ..fields['id'] = '${draft.id}'
+      ..fields['title'] = draft.title
+      ..fields['lat'] = draft.lat?.toString() ?? ''
+      ..fields['lon'] = draft.lon?.toString() ?? '';
+    final image = draft.imageBytes;
+    if (image != null && image.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'image',
+          image,
+          filename: draft.imageName ?? 'upload.jpg',
+        ),
+      );
+    }
+    final response =
+        await http.Response.fromStream(await _client.send(request));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update landmark');
+    }
+  }
+
+  Future<void> deleteLandmark(int id) async {
+    final uri = _baseUri.replace(queryParameters: {'id': '$id'});
+    final response = await _client.delete(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete landmark');
+    }
+  }
 }
