@@ -13,6 +13,18 @@ class LandmarkApi {
 
   final http.Client _client;
 
+  Uri get _assetBase => _baseUri.resolve('.');
+
+  String _absoluteImageUrl(String imagePath) {
+    if (imagePath.isEmpty) {
+      return '';
+    }
+    if (imagePath.startsWith('http')) {
+      return imagePath;
+    }
+    return _assetBase.resolve(imagePath).toString();
+  }
+
   Future<List<Landmark>> fetchLandmarks() async {
     final response = await _client.get(_baseUri);
     if (response.statusCode != 200) {
@@ -24,7 +36,10 @@ class LandmarkApi {
     }
     return decoded.map((raw) {
       final map = Map<String, dynamic>.from(raw as Map);
-      return Landmark.fromJson(map);
+      final landmark = Landmark.fromJson(map);
+      return landmark.copyWith(
+        imageUrl: _absoluteImageUrl((map['image'] ?? '').toString()),
+      );
     }).toList();
   }
 
