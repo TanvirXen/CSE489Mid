@@ -43,9 +43,7 @@ class LandmarkApi {
     }
     final response =
         await http.Response.fromStream(await _client.send(request));
-    if (response.statusCode != 200) {
-      throw Exception('Failed to create landmark');
-    }
+    _ensureSuccess(response, fallback: 'Failed to create landmark');
     final decoded = jsonDecode(response.body);
     final rawId = decoded is Map ? decoded['id'] : null;
     return int.tryParse(rawId?.toString() ?? '') ?? 0;
@@ -70,17 +68,13 @@ class LandmarkApi {
     }
     final response =
         await http.Response.fromStream(await _client.send(request));
-    if (response.statusCode != 200) {
-      throw Exception('Failed to update landmark');
-    }
+    _ensureSuccess(response, fallback: 'Failed to update landmark');
   }
 
   Future<void> deleteLandmark(int id) async {
     final uri = _buildUri({'id': '$id'});
     final response = await _client.delete(uri);
-    if (response.statusCode != 200) {
-      throw Exception('Failed to delete landmark');
-    }
+    _ensureSuccess(response, fallback: 'Failed to delete landmark');
   }
 
   void _assignCommonFields(http.MultipartRequest request, LandmarkDraft draft) {
@@ -102,5 +96,33 @@ class LandmarkApi {
     final merged = Map<String, String>.from(_baseUri.queryParameters);
     merged.addAll(queryParameters);
     return _baseUri.replace(queryParameters: merged);
+  }
+
+  void _ensureSuccess(
+    http.BaseResponse response, {
+    String fallback = 'Request failed',
+    String? body,
+  }) {
+    if (response.statusCode == 200) return;
+    final resolvedBody = body ??
+        (response is http.Response ? response.body : null) ??
+        '';
+    final message = _extractError(resolvedBody) ??
+        '$fallback (${response.statusCode})';
+    throw Exception(message);
+  }
+
+  String? _extractError(String? body) {
+    if (body == null || body.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        final error = decoded['error'] ?? decoded['message'];
+        return error?.toString();
+      }
+    } catch (_) {
+      return body.trim().isEmpty ? null : body;
+    }
+    return null;
   }
 }
