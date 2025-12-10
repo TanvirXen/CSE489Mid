@@ -30,7 +30,7 @@ class LandmarkApi {
   Future<List<Landmark>> fetchLandmarks() async {
     final response = await _client.get(_baseUri);
     if (response.statusCode != 200) {
-      throw Exception('Unable to load landmarks');
+      throw Exception('Unable to load landmarks (${response.statusCode})');
     }
     final decoded = jsonDecode(response.body);
     if (decoded is! List) {
@@ -39,9 +39,10 @@ class LandmarkApi {
     return decoded.map((raw) {
       final map = Map<String, dynamic>.from(raw as Map);
       final landmark = Landmark.fromJson(map);
-      return landmark.copyWith(
+      final resolved = landmark.copyWith(
         imageUrl: _absoluteImageUrl((map['image'] ?? '').toString()),
       );
+      return resolved;
     }).toList();
   }
 
@@ -65,21 +66,20 @@ class LandmarkApi {
     if (draft.id == null) {
       throw ArgumentError('Cannot update without an id');
     }
-    final request = http.MultipartRequest('PUT', _baseUri)
-      ..fields['id'] = '${draft.id}';
-    _assignCommonFields(request, draft);
     if (draft.hasImage) {
-      request.files.add(
-        _buildMultipartImage(draft.imageBytes!, fileName: draft.imageName),
-      );
+      await _replaceLandmarkWithNewImage(draft);
+      return;
     }
+    final request = http.MultipartRequest('PUT', _baseUri)
+      ..fields.addAll(_buildCommonFields(draft))
+      ..fields['id'] = '${draft.id}';
     final response =
         await http.Response.fromStream(await _client.send(request));
     _ensureSuccess(response, fallback: 'Failed to update landmark');
   }
 
   Future<void> deleteLandmark(int id) async {
-    final uri = _buildUri({'id': '$id'});
+    final uri = _buildUri({'id': id.toString()});
     final response = await _client.delete(uri);
     _ensureSuccess(response, fallback: 'Failed to delete landmark');
   }
@@ -96,6 +96,20 @@ class LandmarkApi {
     };
   }
 
+  http.MultipartFile _buildMultipartImage(Uint8List bytes, {String? fileName}) {
+    final mediaType = _detectMediaType(bytes, fileName: fileName);
+    if (mediaType == null) {
+      throw Exception('Unsupported image format. Use JPG, PNG, GIF or WebP.');
+    }
+    final safeName = _normalizedFileName(fileName, mediaType);
+    return http.MultipartFile.fromBytes(
+      'image',
+      bytes,
+      filename: safeName,
+      contentType: mediaType,
+    );
+  }
+
   Uri _buildUri(Map<String, String> queryParameters) {
     if (queryParameters.isEmpty) {
       return _baseUri;
@@ -105,17 +119,32 @@ class LandmarkApi {
     return _baseUri.replace(queryParameters: merged);
   }
 
-  http.MultipartFile _buildMultipartImage(Uint8List bytes, {String? fileName}) {
-    final mediaType = _detectMediaType(bytes, fileName: fileName);
-    if (mediaType == null) {
-      throw Exception('Unsupported image format');
+  void _ensureSuccess(
+    http.BaseResponse response, {
+    String fallback = 'Request failed',
+    String? body,
+  }) {
+    if (response.statusCode == 200) return;
+    final resolvedBody = body ??
+        (response is http.Response ? response.body : null) ??
+        '';
+    final message = _extractError(resolvedBody) ??
+        '$fallback (${response.statusCode})';
+    throw Exception(message);
+  }
+
+  String? _extractError(String? body) {
+    if (body == null || body.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        final error = decoded['error'] ?? decoded['message'];
+        return error?.toString();
+      }
+    } catch (_) {
+      return body.trim().isEmpty ? null : body;
     }
-    return http.MultipartFile.fromBytes(
-      'image',
-      bytes,
-      filename: fileName ?? 'image',
-      contentType: mediaType,
-    );
+    return null;
   }
 
   MediaType? _detectMediaType(Uint8List bytes, {String? fileName}) {
@@ -161,31 +190,47 @@ class LandmarkApi {
     return null;
   }
 
-  void _ensureSuccess(
-    http.BaseResponse response, {
-    String fallback = 'Request failed',
-    String? body,
-  }) {
-    if (response.statusCode == 200) return;
-    final resolvedBody = body ??
-        (response is http.Response ? response.body : null) ??
-        '';
-    final message = _extractError(resolvedBody) ??
-        '$fallback (${response.statusCode})';
-    throw Exception(message);
+  String _normalizedFileName(String? original, MediaType mediaType) {
+    final extension = switch (mediaType.subtype) {
+      'jpeg' => '.jpg',
+      'png' => '.png',
+      'gif' => '.gif',
+      'webp' => '.webp',
+      _ => '.bin',
+    };
+    final raw = (original?.trim().isNotEmpty ?? false)
+        ? original!.trim()
+        : 'image$extension';
+    final sanitized = raw.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final lower = sanitized.toLowerCase();
+    if (lower.endsWith(extension)) {
+      return sanitized;
+    }
+    final dotIndex = sanitized.lastIndexOf('.');
+    final base = dotIndex == -1 ? sanitized : sanitized.substring(0, dotIndex);
+    return '$base$extension';
   }
 
-  String? _extractError(String? body) {
-    if (body == null || body.isEmpty) return null;
+  Future<void> _replaceLandmarkWithNewImage(LandmarkDraft draft) async {
+    final replacement = LandmarkDraft(
+      title: draft.title,
+      lat: draft.lat,
+      lon: draft.lon,
+      imageBytes: draft.imageBytes,
+      imageName: draft.imageName,
+    );
+    int? newId;
     try {
-      final decoded = jsonDecode(body);
-      if (decoded is Map) {
-        final error = decoded['error'] ?? decoded['message'];
-        return error?.toString();
+      newId = await createLandmark(replacement);
+      await deleteLandmark(draft.id!);
+      draft.id = newId;
+    } catch (error) {
+      if (newId != null) {
+        try {
+          await deleteLandmark(newId);
+        } catch (_) {}
       }
-    } catch (_) {
-      return body.trim().isEmpty ? null : body;
+      rethrow;
     }
-    return null;
   }
 }
