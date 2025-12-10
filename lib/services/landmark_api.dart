@@ -76,7 +76,7 @@ class LandmarkApi {
   }
 
   Future<void> deleteLandmark(int id) async {
-    final uri = _baseUri.replace(queryParameters: {'id': '$id'});
+    final uri = _buildUri({'id': '$id'});
     final response = await _client.delete(uri);
     if (response.statusCode != 200) {
       throw Exception('Failed to delete landmark');
@@ -93,5 +93,14 @@ class LandmarkApi {
       'lat': draft.lat?.toString() ?? '',
       'lon': draft.lon?.toString() ?? '',
     };
+  }
+
+  Uri _buildUri(Map<String, String> queryParameters) {
+    if (queryParameters.isEmpty) {
+      return _baseUri;
+    }
+    final merged = Map<String, String>.from(_baseUri.queryParameters);
+    merged.addAll(queryParameters);
+    return _baseUri.replace(queryParameters: merged);
   }
 }
