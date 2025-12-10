@@ -27,4 +27,29 @@ class LandmarkApi {
       return Landmark.fromJson(map);
     }).toList();
   }
+
+  Future<int> createLandmark(LandmarkDraft draft) async {
+    final request = http.MultipartRequest('POST', _baseUri)
+      ..fields['title'] = draft.title
+      ..fields['lat'] = draft.lat?.toString() ?? ''
+      ..fields['lon'] = draft.lon?.toString() ?? '';
+    final image = draft.imageBytes;
+    if (image != null && image.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'image',
+          image,
+          filename: draft.imageName ?? 'upload.jpg',
+        ),
+      );
+    }
+    final response =
+        await http.Response.fromStream(await _client.send(request));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to create landmark');
+    }
+    final decoded = jsonDecode(response.body);
+    final rawId = decoded is Map ? decoded['id'] : null;
+    return int.tryParse(rawId?.toString() ?? '') ?? 0;
+  }
 }
