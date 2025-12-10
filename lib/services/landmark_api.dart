@@ -84,10 +84,14 @@ class LandmarkApi {
   }
 
   void _assignCommonFields(http.MultipartRequest request, LandmarkDraft draft) {
-    request.fields.addAll({
+    request.fields.addAll(_buildCommonFields(draft));
+  }
+
+  Map<String, String> _buildCommonFields(LandmarkDraft draft) {
+    return {
       'title': draft.title,
       'lat': draft.lat?.toString() ?? '',
       'lon': draft.lon?.toString() ?? '',
-    });
+    };
   }
 }
