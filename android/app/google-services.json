@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "848790076272",
+    "firebase_url": "https://dollar-ac665-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "dollar-ac665",
+    "storage_bucket": "dollar-ac665.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:848790076272:android:c5a2fb8345e37324192db5",
+        "android_client_info": {
+          "package_name": "com.example.mid23141010"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCmLW2Z04azlKulEr1_YPPDyCP65iH7wiw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

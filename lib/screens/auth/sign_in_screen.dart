@@ -17,6 +17,8 @@ class _SignInScreenState extends State<SignInScreen> {
   final _passwordController = TextEditingController();
 
   bool _obscure = true;
+  bool _submitting = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -25,9 +27,34 @@ class _SignInScreenState extends State<SignInScreen> {
     super.dispose();
   }
 
-  void _signIn() {
-    if (_formKey.currentState?.validate() != true) return;
-    context.read<AppState>().completeAuth();
+  Future<void> _signIn() async {
+    if (_formKey.currentState?.validate() != true || _submitting) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _error = null;
+      _submitting = true;
+    });
+    try {
+      await context.read<AppState>().signIn(
+            _emailController.text.trim(),
+            _passwordController.text,
+          );
+    } catch (error) {
+      setState(() => _error = _asMessage(error));
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
+  String _asMessage(Object error) {
+    final raw = error.toString();
+    const prefix = 'Exception: ';
+    if (raw.startsWith(prefix)) {
+      return raw.substring(prefix.length);
+    }
+    return raw;
   }
 
   @override
@@ -100,12 +127,33 @@ class _SignInScreenState extends State<SignInScreen> {
                               return null;
                             },
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 8),
+                          if (_error != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                _error!,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.error,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 8),
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton(
-                              onPressed: _signIn,
-                              child: const Text('Continue'),
+                              onPressed: _submitting ? null : _signIn,
+                              child: _submitting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation(Colors.white),
+                                      ),
+                                    )
+                                  : const Text('Continue'),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -114,11 +162,24 @@ class _SignInScreenState extends State<SignInScreen> {
                             children: [
                               const Text('New here?'),
                               TextButton(
-                                onPressed: () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const SignUpScreen(),
-                                  ),
-                                ),
+                                onPressed: () async {
+                                  final created =
+                                      await Navigator.of(context).push<bool>(
+                                    MaterialPageRoute(
+                                      builder: (_) => const SignUpScreen(),
+                                    ),
+                                  );
+                                  if (!context.mounted) return;
+                                  if (created == true) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Account created. Please sign in.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
                                 child: const Text('Create account'),
                               ),
                             ],
