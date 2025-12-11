@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../controllers/app_state.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -14,6 +17,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
 
+  bool _submitting = false;
+  String? _error;
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -23,12 +29,38 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  void _submit() {
-    if (_formKey.currentState?.validate() != true) return;
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Account created. Please sign in.')),
-    );
+  Future<void> _submit() async {
+    if (_formKey.currentState?.validate() != true || _submitting) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _error = null;
+      _submitting = true;
+    });
+    try {
+      await context.read<AppState>().signUp(
+            name: _nameController.text,
+            email: _emailController.text,
+            password: _passwordController.text,
+          );
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } catch (error) {
+      setState(() => _error = _asMessage(error));
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
+  String _asMessage(Object error) {
+    final raw = error.toString();
+    const prefix = 'Exception: ';
+    if (raw.startsWith(prefix)) {
+      return raw.substring(prefix.length);
+    }
+    return raw;
   }
 
   @override
@@ -92,12 +124,33 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ? null
                           : 'Passwords do not match',
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 8),
+                    if (_error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          _error!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        onPressed: _submit,
-                        child: const Text('Create account'),
+                        onPressed: _submitting ? null : _submit,
+                        child: _submitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor:
+                                      AlwaysStoppedAnimation(Colors.white),
+                                ),
+                              )
+                            : const Text('Create account'),
                       ),
                     ),
                   ],
